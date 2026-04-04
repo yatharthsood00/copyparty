@@ -2280,6 +2280,14 @@ class HttpCli(object):
             except:
                 raise Pebkac(400, "client d/c before 100 continue")
 
+        # DLNA/SSDP control requests (SOAP)
+        if self.vpath.startswith(".cpr/ssdp/ctl/"):
+            if self.conn.hsrv.ssdp:
+                return self.conn.hsrv.ssdp.reply(self)
+            else:
+                self.reply(b"ssdp is disabled in server config", 404)
+                return False
+
         if "raw" in self.uparam:
             return self.handle_stash(False)
 
@@ -4779,6 +4787,26 @@ class HttpCli(object):
             mime = safe_mime(mime)
 
         self.out_headers["Accept-Ranges"] = "bytes"
+
+        # DLNA headers for media files
+        _ext = os.path.splitext(req_path)[1].lower() if req_path else ""
+        _dlna_pn = {
+            ".mp4": "AVC_MP4_MP_SD", ".m4v": "AVC_MP4_MP_SD",
+            ".mkv": "MATROSKA", ".webm": "MATROSKA",
+            ".avi": "AVI", ".wmv": "WMVSPLL_BASE",
+            ".mp3": "MP3", ".flac": "FLAC",
+            ".wav": "LPCM", ".aac": "AAC_ISO_320",
+            ".m4a": "AAC_ISO_320", ".ogg": "OGG",
+            ".jpg": "JPEG_SM", ".jpeg": "JPEG_SM",
+            ".png": "PNG_LRG", ".gif": "GIF_LRG",
+        }.get(_ext, "")
+        if _dlna_pn:
+            self.out_headers["transferMode.dlna.org"] = "Streaming"
+            self.out_headers["contentFeatures.dlna.org"] = (
+                "DLNA.ORG_PN={};DLNA.ORG_OP=01;DLNA.ORG_CI=0;"
+                "DLNA.ORG_FLAGS=01700000000000000000000000000000"
+            ).format(_dlna_pn)
+
         logmsg += unicode(status) + logtail
 
         if self.mode == "HEAD" or not do_send:
